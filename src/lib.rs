@@ -1,4 +1,4 @@
-use std::{convert::TryInto, ops::Range};
+use std::{convert::TryInto};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum PieceType {
@@ -25,27 +25,51 @@ impl PieceType {
 
 #[derive(Copy, Clone, Debug)]
 pub enum MoveError {
+    GameDone,
     NoSourcePiece,
     IncorrectSourceColor,
     MoveToSamePos,
     InvalidTargetPosition,
     MoveToSameColor,
     InvalidMove,
+    ResultsInCheck,
 }
 
+#[derive(Copy, Clone, Debug)]
 pub enum MoveSuccess {
-    
+    Ok,
+    GameWonByWhite,
+    GameWonByBlack,
 }
 
 impl MoveError {
     pub fn to_string(&self) -> &str {
         match self {
+            &Self::GameDone => "The game has finished",
             &Self::NoSourcePiece => "You have not marked a square with a piece to move",
             &Self::IncorrectSourceColor => "You have picked the wrong color to move",
             &Self::MoveToSamePos => "You are trying to move to the same position",
             &Self::InvalidTargetPosition => "You cannot move outside the board",
             &Self::MoveToSameColor => "You cannot move to your own pieces",
             &Self::InvalidMove => "Invalid move for selected piece",
+            &Self::ResultsInCheck => "This move places you in check",
+        }
+    }
+}
+
+impl MoveSuccess {
+    pub fn to_string(&self) -> &str {
+        match self {
+            &Self::Ok => "Ok",
+            &Self::GameWonByWhite => "White has won",
+            &Self::GameWonByBlack => "Black has won",
+        }
+    }
+
+    pub fn get_game_won_by_player(player: Player) -> MoveSuccess {
+        match player {
+            Player::White => MoveSuccess::GameWonByWhite,
+            Player::Black => MoveSuccess::GameWonByBlack,
         }
     }
 }
@@ -99,6 +123,7 @@ pub struct State {
     total_steps: u32,
     white_eliminated: Vec<PieceType>,
     black_eliminated: Vec<PieceType>,
+    game_running: bool,
 }
 
 impl State {
@@ -109,6 +134,7 @@ impl State {
             total_steps: 0,
             white_eliminated: Vec::new(),
             black_eliminated: Vec::new(),
+            game_running: true,
         }
     }
 
@@ -151,6 +177,14 @@ impl State {
         match self.get(pos) {
             None => Err(MoveError::NoSourcePiece),
             Some(_) => Ok(())
+        }
+    }
+
+    fn check_game_running(&self) -> Result<(), MoveError> {
+        if self.game_running {
+            Ok(())
+        } else {
+            Err(MoveError::GameDone)
         }
     }
 
@@ -226,43 +260,39 @@ impl State {
         }
     }
 
-    fn check_all_squares_between<F: Fn(Pos) -> bool>(&self, from: Pos, to: Pos, fun: F) -> bool {
+    fn get_all_pos_between(from: Pos, to: Pos) -> Vec<Pos> {
+        let mut list: Vec<Pos> = Vec::new();
         if from.y == to.y {
-            //for x in (from.x..to.x).skip(1) {
             for x in range(from.x, to.x).skip(1) {
-                if !fun(Pos::new(x, from.y)) {
-                    return false
-                }
+                list.push(Pos::new(x, from.y));
             }
         } else if from.x == to.x {
-            //for y in (from.y..to.y).skip(1) {
             for y in range(from.y, to.y).skip(1) {
-                if !fun(Pos::new(from.x, y)) {
-                    return false
-                }
+                list.push(Pos::new(from.x, y));
             }
         } else if (from.x - to.x).abs() == (from.y - to.y).abs() {
-            //for x in (from.x..to.x).skip(1) {
             for x in range(from.x, to.x).skip(1) {
                 let y = if to.y >= from.y {
                     from.y + (x - from.x).abs()
                 } else {
                     from.y - (x - from.x).abs()
                 };
-                if !fun(Pos::new(x, y)) {
-                    return false
-                }
+                list.push(Pos::new(x, y));
             }
         } else {
             panic!("check_all_squares_between was run with inconsistent parameters");
         }
-        true
+        list
     }
 
     fn check_all_squares_between_clear(&self, from: Pos, to: Pos) -> bool {
-        self.check_all_squares_between(from, to, |pos| {
-            self.get(pos).is_none()
-        })
+        let list = State::get_all_pos_between(from, to);
+        for pos in list {
+            if !self.get(pos).is_none() {
+                return false;
+            }
+        }
+        true
     }
 
     fn check_valid_move_rook(&self, from: Pos, to: Pos) -> bool {
@@ -334,6 +364,13 @@ impl State {
         }
     }
 
+    fn get_other_player(player: Player) -> Player {
+        match player {
+            Player::White => Player::Black,
+            Player::Black => Player::White,
+        }
+    }
+
     fn get_all_pieces_for_player(&self, player: Player) -> Vec<Pos> {
         let mut list: Vec<Pos> = Vec::new();
         for x in 0..8 {
@@ -349,87 +386,186 @@ impl State {
         list
     }
 
-    fn get_threatening_pieces(A) {
-        let list: Vec<Pos> = Vec::new();
-        for all B pieces
-            if b can do valid move to A:s king
-                list.append(pos of b)
-        return list
+    fn get_king_pos(&self, player: Player) -> Option<Pos> {
+        for x in 0..8 {
+            for y in 0..8 {
+                let pos = Pos::new(x, y);
+                if let Some(piece) = self.get(pos) {
+                    if piece.player == player && piece.piece_type == PieceType::King {
+                        return Some(pos)
+                    }
+                }
+            }   
+        };
+        None
     }
 
-    fn is_player_check_mate(A) {
-        check_players = is_player_check(A) // innehåller positioner
+    fn get_threatening_pieces(&self, player: Player) -> Vec<Pos> {
+        let mut list: Vec<Pos> = Vec::new();
+        let king_pos = self.get_king_pos(player).unwrap();
+        for pos in self.get_all_pieces_for_player(State::get_other_player(player)) {
+            if let Ok(()) = self.check_valid_move(pos, king_pos) {
+                list.push(pos);
+            }
+        }
+        list
+    }
+
+    fn check_if_move_results_in_check(&self, from: Pos, to: Pos) -> Result<(), MoveError> {
+        let mut state_copy = self.clone();
+        state_copy.perform_move(from, to);
+        if state_copy.is_player_check(self.current_player) {
+            Err(MoveError::ResultsInCheck)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn is_player_check(&self, player: Player) -> bool {
+        let list = self.get_threatening_pieces(player);
+        list.len() != 0
+    }
+
+    fn is_player_check_mate(&self, player: Player) -> bool {
+        let threatening_pieces = self.get_threatening_pieces(player);
+
+        //println!("begin------");
+        //println!("{:?}", threatening_pieces);
 
         // inga spelare chackar spelare A
-        if check_players == []
-            return false
-        
-        if can_avoid_by_moving_king(A)
-            return false
-
+        if threatening_pieces.len() == 0 {
+            false
+        }
+        else if self.can_avoid_by_moving_king(player) {
+            //println!("can avoid by moving king");
+            false
+        }
         // Det finns 2 spelare som chackar, med andra ord är det kört:
-        if check_players.len > 1
-            return true
-
-        if can_avoid_by_attack(A, check_players[0])
-            return false
-
-        if can_avoid_by_block(A, check_players[0])
-            return false
-
-        return true
+        else if threatening_pieces.len() > 1 {
+            true
+        }
+        else if self.can_avoid_by_attack(player, threatening_pieces[0]) {
+            //println!("can avoid by attack");
+            false
+        }
+        else if self.can_avoid_by_block(player, threatening_pieces[0]) {
+            //println!("can avoid by block");
+            false
+        }
+        else {
+            true
+        }
     }
 
-    fn can_avoid_by_moving_king(A) {
-        for pos in positionsAroundKing
-            if A-player is at pos
-                continue
-            state_copy = state.copy()
-            move the king to pos in state_copy
-            if is_player_check(A, state_copy) == []
-                return true
-        return false
+    fn get_positions_around(pos: Pos) -> Vec<Pos> {
+        let mut list: Vec<Pos> = Vec::new();
+        for x in (pos.x-1)..(pos.x+1) {
+            for y in (pos.y-1)..(pos.y+1) {
+                if x >= 0 && x < 8 && y >= 0 && y < 8 && (x != pos.x || y != pos.y) {
+                    list.push(Pos::new(x, y));
+                }
+            }    
+        }
+        list
     }
 
-    fn can_avoid_by_attack(A, check_player) {
-        for piece in A-players except kung
-            if piece can do valid move to check_player
-                state_copy = state.copy()
-                move piece to check_player in state_copy
-                if is_player_check(A, state_copy) == []
-                    return true
-        return false
+    fn pos_contains_player(&self, pos: Pos, player: Player) -> bool {
+        if let Some(piece) = self.get(pos) {
+            if piece.player == player {
+                return true;
+            }
+        }
+        false
     }
 
-    fn can_avoid_by_block(A, check_player) {
-        if check_player != queen/rook/bishop
-            return false
-        for pos in positions between check_player and A:s king
-            for piece in A-players except king 
-                if piece can do valid move to pos
-                    state_copy = state.copy()
-                    move piece to check_player in state_copy
-                    if is_player_check(A, state_copy) == []
-                        return true
+    fn can_avoid_by_moving_king(&self, player: Player) -> bool {
+        let king_position = self.get_king_pos(player).unwrap();
+        for pos in State::get_positions_around(king_position) {
+            if self.pos_contains_player(pos, player) {
+                continue;
+            }
+            let mut state_copy = self.clone();
+            state_copy.perform_move(king_position, pos);
+            if !state_copy.is_player_check(player) {
+                return true;
+            }
+        }
+        false
     }
 
-    pub fn move_piece(&mut self, from: Pos, to: Pos) -> Result<(), MoveError> {
-        self.check_piece_at_source(from)?;     // Check that we move something
-        self.check_correct_color_at_source(from)?;
-        State::check_not_same_position(from, to)?; // Check that we don't move to the same position
+    fn can_avoid_by_attack(&self, player: Player, threatening_player: Pos) -> bool {
+        for pos in self.get_all_pieces_for_player(player) {
+            if let Ok(()) = self.check_valid_move(pos, threatening_player) {
+                let mut state_copy = self.clone();
+                state_copy.perform_move(pos, threatening_player);
+                if !state_copy.is_player_check(player) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn can_avoid_by_block(&self, player: Player, threatening_player: Pos) -> bool {
+        let threatening_piece = self.get(threatening_player).unwrap();
+        if threatening_piece.piece_type != PieceType::Queen  &&
+           threatening_piece.piece_type != PieceType::Rook   &&
+           threatening_piece.piece_type != PieceType::Bishop
+        {
+            return false;
+        }
+
+        let king_pos = self.get_king_pos(player).unwrap();
+
+        //println!("{:?}", self.get_all_pieces_for_player(player));
+
+        for between_pos in State::get_all_pos_between(threatening_player, king_pos) {
+            for piece_pos in self.get_all_pieces_for_player(player) {
+                if let Ok(()) = self.check_valid_move(piece_pos, between_pos) {
+
+                    //println!("this happens");
+                    //println!("{:?}, {:?}", piece_pos, between_pos);
+
+                    let mut state_copy = self.clone();
+                    state_copy.perform_move(piece_pos, between_pos);
+
+                    if !state_copy.is_player_check(player) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn handle_post_move(&mut self) -> Result<MoveSuccess, MoveError> {
+        if self.is_player_check_mate(self.current_player) {
+            //println!("is check mate");
+            self.game_running = false;
+            Ok(MoveSuccess::get_game_won_by_player(State::get_other_player(self.current_player)))
+        } else {
+            //println!("is not check mate");
+            Ok(MoveSuccess::Ok)
+        }
+    }
+
+    pub fn move_piece(&mut self, from: Pos, to: Pos) -> Result<MoveSuccess, MoveError> {
+        self.check_game_running()?;
         State::check_valid_bounds(from)?;
         State::check_valid_bounds(to)?;
+        State::check_not_same_position(from, to)?; // Check that we don't move to the same position
+        self.check_piece_at_source(from)?;     // Check that we move something
+        self.check_correct_color_at_source(from)?;
         self.check_not_move_to_same_color(from, to)?;
         self.check_valid_move(from, to)?;
-
-        // Check for check mate
+        self.check_if_move_results_in_check(from, to)?;
 
         self.eliminate_target(to);
         self.perform_move(from, to);
         self.swap_current_player();
-
         self.total_steps += 1;
-        Ok(())
+
+        self.handle_post_move()
     }
 }
 
@@ -647,5 +783,16 @@ mod tests {
         assert!(state.black_eliminated.len() == 0);
         assert!(state.white_eliminated.len() == 1);
         assert_eq!(state.white_eliminated[0], PieceType::Pawn);
+    }
+
+    #[test]
+    fn fools_mate_test() {
+        let mut state = State::new();
+        assert!(state.move_piece(Pos::new(5, 1), Pos::new(5, 2)).is_ok());
+        assert!(state.move_piece(Pos::new(4, 6), Pos::new(4, 4)).is_ok());
+        assert!(state.move_piece(Pos::new(6, 1), Pos::new(6, 3)).is_ok());
+        assert!(state.game_running);
+        assert!(state.move_piece(Pos::new(3, 7), Pos::new(7, 3)).is_ok());
+        assert!(!state.game_running);
     }
 }

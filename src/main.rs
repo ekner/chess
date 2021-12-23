@@ -7,13 +7,13 @@ use sdl2::pixels::{self, Color};
 
 use sdl2::image::{InitFlag, LoadTexture};
 use sdl2::rect::Rect;
-use sdl2::render::{Canvas, Texture, TextureCreator};
-use sdl2::video::{Window, WindowContext};
-use std::alloc::handle_alloc_error;
-use std::env;
+use sdl2::render::{Canvas, Texture}; // TextureCreator
+use sdl2::video::{Window}; // WindowContext
+//use std::alloc::handle_alloc_error;
+//use std::env;
 use std::path::Path;
 
-use sdl2::gfx::primitives::DrawRenderer;
+//use sdl2::gfx::primitives::DrawRenderer;
 
 const SCREEN_WIDTH: u32 = 1200;
 const SCREEN_HEIGHT: u32 = 800;
@@ -26,7 +26,7 @@ struct Layout {
 fn draw(canvas: &mut Canvas<Window>, textures: &Vec<Texture>, layout: &Layout, state: &State, moving_from: &Option<Pos>) {
     for y in (0..8).rev() {
         for x in 0..8 {
-            let mut square_color = if (x + y) % 2 == 0 {
+            let mut square_color = if (x + y) % 2 == 1 {
                 Color::RGB(255, 206, 158)
             } else {
                 Color::RGB(209, 139, 71)
@@ -70,18 +70,21 @@ fn draw(canvas: &mut Canvas<Window>, textures: &Vec<Texture>, layout: &Layout, s
 }
 
 fn handle_mouse_click(layout: &Layout, state: &mut State, moving_from: &mut Option<Pos>, x: i32, y: i32) {
-    println!("mouse btn down at ({},{})", x, y);
+    //println!("mouse btn down at ({},{})", x, y);
 
     let x_pos = x / (layout.square_size as i32);
     let y_pos = 7 - y / (layout.square_size as i32);
 
-    println!("positions: ({},{})", x_pos, y_pos);
+    //println!("positions: ({},{})", x_pos, y_pos);
 
     if let Some(pos_from) = moving_from {
         let res = state.move_piece(*pos_from, Pos::new(x_pos, y_pos));
-        if let Err(err) = res {
-            println!("{:?}", err);
+
+        match res {
+            Err(err) => println!("{:?}", err),
+            Ok(msg) => println!("{:?}", msg),
         }
+
         *moving_from = None;
     } else {
         *moving_from = Some(Pos::new(x_pos, y_pos));
@@ -93,9 +96,9 @@ fn handle_keydown(keycode: Keycode) -> bool {
         true
     } else if keycode == Keycode::Space {
         println!("space down");
-        for i in 0..400 {
+        //for i in 0..400 {
             //canvas.pixel(i as i16, i as i16, 0x0F0000FFu32)?;
-        }
+        //}
         //canvas.present();
         false
     } else {
@@ -145,6 +148,11 @@ fn main() -> Result<(), String> {
 
     let mut state = chess::State::new();
     let mut moving_from: Option<Pos> = None;
+
+    /*assert!(state.move_piece(Pos::new(5, 1), Pos::new(5, 2)).is_ok());
+    assert!(state.move_piece(Pos::new(4, 6), Pos::new(4, 4)).is_ok());
+    assert!(state.move_piece(Pos::new(6, 1), Pos::new(6, 3)).is_ok());
+    assert!(state.move_piece(Pos::new(3, 7), Pos::new(7, 3)).is_ok());*/
 
     draw(&mut canvas, &textures, &layout, &state, &moving_from);
 
