@@ -13,12 +13,12 @@ pub enum PieceType {
 impl PieceType {
     pub fn to_string(&self) -> &str {
         match self {
-            &Self::King => "K",
-            &Self::Queen => "Q",
-            &Self::Rook => "R",
-            &Self::Bishop => "B",
-            &Self::Knight => "N",
-            &Self::Pawn => "P",
+            &Self::King => "king",
+            &Self::Queen => "queen",
+            &Self::Rook => "rook",
+            &Self::Bishop => "bishop",
+            &Self::Knight => "knight",
+            &Self::Pawn => "pawn",
         }
     }
 }
@@ -45,14 +45,14 @@ pub enum MoveSuccess {
 impl MoveError {
     pub fn to_string(&self) -> &str {
         match self {
-            &Self::GameDone => "The game has finished",
-            &Self::NoSourcePiece => "You have not marked a square with a piece to move",
-            &Self::IncorrectSourceColor => "You have picked the wrong color to move",
-            &Self::MoveToSamePos => "You are trying to move to the same position",
+            &Self::GameDone =>              "The game has finished",
+            &Self::NoSourcePiece =>         "You have not marked a square with a piece to move",
+            &Self::IncorrectSourceColor =>  "You have picked the wrong color to move",
+            &Self::MoveToSamePos =>         "You are trying to move to the same position",
             &Self::InvalidTargetPosition => "You cannot move outside the board",
-            &Self::MoveToSameColor => "You cannot move to your own pieces",
-            &Self::InvalidMove => "Invalid move for selected piece",
-            &Self::ResultsInCheck => "This move places you in check",
+            &Self::MoveToSameColor =>       "You cannot move to your own pieces",
+            &Self::InvalidMove =>           "Invalid move for selected piece",
+            &Self::ResultsInCheck =>        "This move places you in check",
         }
     }
 }
@@ -70,6 +70,24 @@ impl MoveSuccess {
         match player {
             Player::White => MoveSuccess::GameWonByWhite,
             Player::Black => MoveSuccess::GameWonByBlack,
+        }
+    }
+}
+
+pub enum GameStatus {
+    WhiteTurn,
+    BlackTurn,
+    GameWonByWhite,
+    GameWonByBlack,
+}
+
+impl GameStatus {
+    pub fn to_string(&self) -> &str {
+        match self {
+            &Self::WhiteTurn => "White's turn",
+            &Self::BlackTurn => "Black's turn",
+            &Self::GameWonByWhite => "Game won by white",
+            &Self::GameWonByBlack => "Game won by black",
         }
     }
 }
@@ -124,6 +142,7 @@ pub struct State {
     white_eliminated: Vec<PieceType>,
     black_eliminated: Vec<PieceType>,
     game_running: bool,
+    game_won_by: Option<Player>,
 }
 
 impl State {
@@ -135,6 +154,29 @@ impl State {
             white_eliminated: Vec::new(),
             black_eliminated: Vec::new(),
             game_running: true,
+            game_won_by: None,
+        }
+    }
+
+    pub fn get_current_player(&self) -> Player {
+        self.current_player
+    }
+
+    pub fn get_game_running(&self) -> bool {
+        self.game_running
+    }
+
+    pub fn get_game_status(&self) -> GameStatus {
+        if self.game_running {
+            match self.current_player {
+                Player::White => GameStatus::WhiteTurn,
+                Player::Black => GameStatus::BlackTurn,
+            }
+        } else {
+            match self.game_won_by.unwrap() {
+                Player::White => GameStatus::GameWonByWhite,
+                Player::Black => GameStatus::GameWonByBlack,
+            }
         }
     }
 
@@ -542,6 +584,7 @@ impl State {
         if self.is_player_check_mate(self.current_player) {
             //println!("is check mate");
             self.game_running = false;
+            self.game_won_by = Some(State::get_other_player(self.current_player));
             Ok(MoveSuccess::get_game_won_by_player(State::get_other_player(self.current_player)))
         } else {
             //println!("is not check mate");
