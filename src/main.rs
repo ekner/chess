@@ -9,16 +9,9 @@ use sdl2::pixels::{self, Color};
 use sdl2::image::{InitFlag, LoadTexture};
 use sdl2::rect::Rect;
 use sdl2::render::{Canvas, Texture, TextureQuery, TextureCreator};
-use sdl2::ttf::{Font, Sdl2TtfContext};
-// TextureCreator
-use sdl2::video::{Window, WindowContext}; use std::cell::RefCell;
-// WindowContext
-//use std::alloc::handle_alloc_error;
-//use std::env;
+use sdl2::ttf::{Font};
+use sdl2::video::{Window, WindowContext};
 use std::path::Path;
-use std::rc::Rc;
-
-//use sdl2::gfx::primitives::DrawRenderer;
 
 const SCREEN_WIDTH: u32 = 1200;
 const SCREEN_HEIGHT: u32 = 640;
@@ -41,12 +34,9 @@ impl Layout {
 fn handle_mouse_click(layout: &Layout, state: &mut State, moving_from: &mut Option<Pos>, x: i32, y: i32)
         -> Option<Result<MoveSuccess, MoveError>>
     {
-    //println!("mouse btn down at ({},{})", x, y);
 
     let x_pos = x / (layout.square_size as i32);
     let y_pos = 7 - y / (layout.square_size as i32);
-
-    //println!("positions: ({},{})", x_pos, y_pos);
 
     if let Some(pos_from) = moving_from {
         let res = state.move_piece(*pos_from, Pos::new(x_pos, y_pos));
@@ -67,13 +57,6 @@ fn handle_mouse_click(layout: &Layout, state: &mut State, moving_from: &mut Opti
 fn handle_keydown(keycode: Keycode) -> bool {
     if keycode == Keycode::Escape {
         true
-    } else if keycode == Keycode::Space {
-        println!("space down");
-        //for i in 0..400 {
-            //canvas.pixel(i as i16, i as i16, 0x0F0000FFu32)?;
-        //}
-        //canvas.present();
-        false
     } else {
         false
     }
@@ -231,7 +214,7 @@ fn create_window() -> Result<(Window, Sdl), String> {
     let video_subsys = sdl_context.video()?;
     let window = video_subsys
         .window(
-            "rust-sdl2_gfx: draw line & FPSManager",
+            "Chess",
             SCREEN_WIDTH,
             SCREEN_HEIGHT,
         )
@@ -250,16 +233,10 @@ fn main() -> Result<(), String> {
     let mut state = State::new();
     let mut moving_from: Option<Pos> = None;
 
-    // font loading
     let font_path = "ubuntu.ttf";
     let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string()).unwrap();
     let mut font = ttf_context.load_font(font_path, 128).unwrap();
     font.set_style(sdl2::ttf::FontStyle::BOLD);
-
-    /*assert!(state.move_piece(Pos::new(5, 1), Pos::new(5, 2)).is_ok());
-    assert!(state.move_piece(Pos::new(4, 6), Pos::new(4, 4)).is_ok());
-    assert!(state.move_piece(Pos::new(6, 1), Pos::new(6, 3)).is_ok());
-    assert!(state.move_piece(Pos::new(3, 7), Pos::new(7, 3)).is_ok());*/
 
     graphics.draw(&state, &moving_from);
 
@@ -295,29 +272,3 @@ fn main() -> Result<(), String> {
 
     Ok(())
 }
-
-/*use termion::{color, style};
-fn main() {
-    println!("I'm using the library");
-
-    let state = chess::State::new();
-
-    println!("{}-----------------", color::Fg(color::White));
-    for y in (0..8).rev() {
-        for x in 0..8 {
-            let piece = state.get(chess::Pos::new(x, y));
-            print!("{}", color::Fg(color::White));
-            match piece {
-                None => print!("|{}#", color::Fg(color::Black)),
-                Some(piece) => {
-                    match piece.player {
-                        chess::Player::White => print!("|{}{}", color::Fg(color::White), piece.piece_type.to_string()),
-                        chess::Player::Black => print!("|{}{}", color::Fg(color::Red), piece.piece_type.to_string()),
-                    };  
-                },
-            }
-        }
-        println!("{}|", color::Fg(color::White));
-        println!("-----------------");
-    }   
-}*/
